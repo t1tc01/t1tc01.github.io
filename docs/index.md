@@ -8,11 +8,10 @@ Welcome to my personal blog where I share insights, tutorials, and stories about
 
 ---
 
-## 📝 Latest Posts
+## 📝 Post series 
 
-<!-- - **[Getting Started with Markdown](posts/getting-started-with-markdown.md)**
-- **[My Favorite Coding Tools in 2024](posts/favorite-coding-tools-2024.md)**
-- **[How to Stay Productive as a Developer](posts/stay-productive.md)** -->
+- **[Lang chain series](lang-chain-series/part-1-my-first-experience-with-langchain.md)**
+- **[Leetcode series](leetcode-series/list-of-content.md)**
 
 ---
 
