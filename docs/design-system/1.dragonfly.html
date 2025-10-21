@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design System - Part 1: DragonflyDB / Redis - Which Is the Best Caching Service?</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        pre {
+            background-color: #f4f4f4;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Design System - Part 1: DragonflyDB / Redis - Which Is the Best Caching Service?</h1>
+
+    <p>When looking to choose a caching service, DragonflyDB and Redis are two major contenders. Below is a clear comparison to help understand their differences.</p>
+
+    <h2>Architecture / Performance</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Feature</th>
+                <th>DragonflyDB</th>
+                <th>Redis</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Architecture</td>
+                <td>Multi-threaded, sharded per CPU core</td>
+                <td>Single-threaded event loop</td>
+            </tr>
+            <tr>
+                <td>Throughput</td>
+                <td>Up to 25x higher under load</td>
+                <td>High but limited by single-thread bottleneck</td>
+            </tr>
+            <tr>
+                <td>Latency</td>
+                <td>Lower latency, better during heavy usage</td>
+                <td>Low latency but higher variation</td>
+            </tr>
+            <tr>
+                <td>Scalability</td>
+                <td>Vertical scaling on single instance</td>
+                <td>Requires clusters for scaling</td>
+            </tr>
+            <tr>
+                <td>Memory efficiency</td>
+                <td>Optimized snapshotting and memory use</td>
+                <td>Efficient but snapshotting blocks operations</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p>You can see detail of benchmarking here: <a href="https://www.dragonflydb.io/docs/getting-started/benchmark" target="_blank" rel="noopener noreferrer">https://www.dragonflydb.io/docs/getting-started/benchmark</a></p>
+
+    <h2>Ecosystem / Usability</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Aspect</th>
+                <th>DragonflyDB</th>
+                <th>Redis</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>API Compatibility</td>
+                <td>Drop-in Redis compatible</td>
+                <td>Original Redis API</td>
+            </tr>
+            <tr>
+                <td>Community & Tools</td>
+                <td>Growing rapidly but smaller ecosystem</td>
+                <td>Large, mature, extensive ecosystem</td>
+            </tr>
+            <tr>
+                <td>Maintenance</td>
+                <td>Easier scaling, fewer cluster complexities</td>
+                <td>More complex cluster setup and management</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h1>Install dragonflydb</h1>
+
+    <h2>Install with docker (On Linux)</h2>
+    <pre><code>docker run --network=host --ulimit memlock=-1 docker.dragonflydb.io/dragonflydb/dragonfly</code></pre>
+    <p>Reference: <a href="https://www.dragonflydb.io/docs/getting-started/docker" target="_blank" rel="noopener noreferrer">https://www.dragonflydb.io/docs/getting-started/docker</a></p>
+
+    <h2>Docker compose</h2>
+    <pre><code># Download Official Dragonfly Docker Compose File
+wget https://raw.githubusercontent.com/dragonflydb/dragonfly/main/contrib/docker/docker-compose.yml
+
+# Launch the Dragonfly Instance
+docker compose up -d
+
+# Confirm image is up
+docker ps | grep dragonfly
+# ac94b5ba30a0   docker.dragonflydb.io/dragonflydb/dragonfly   "entrypoint.sh drago…"   45 seconds ago   Up 31 seconds         0.0.0.0:6379->6379/tcp, :::6379->6379/tcp   docker_dragonfly_1
+
+# Log follow the dragonfly container
+docker logs -f docker_dragonfly_1</code></pre>
+    <p>Reference: <a href="https://www.dragonflydb.io/docs/getting-started/docker-compose" target="_blank" rel="noopener noreferrer">https://www.dragonflydb.io/docs/getting-started/docker-compose</a></p>
+
+    <h1>Implement dragonflydb</h1>
+    <p>DragonflyBD adapt with RedisClient, so you can implement this same as implementing redis.</p>
+
+    <h2>Summary</h2>
+
+    <p>DragonflyDB is a modern design optimized for concurrency and multi-core performance, making it ideal for high throughput, low latency caching. Redis, while single-threaded, is trusted for its mature tooling, massive community, and robust ecosystem, but scaling can be more complex.</p>
+
+    <p>For new systems prioritizing speed and simplified vertical scaling, DragonflyDB is the best fit. For applications requiring proven tools and community support, Redis remains a reliable choice.</p>
+
+    <p>This comparison can serve as the first part in a technical blog series on design systems, guiding readers through selecting the best caching technology to meet their project needs.</p>
+</body>
+</html>
+
