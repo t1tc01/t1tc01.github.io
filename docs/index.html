@@ -6,6 +6,10 @@
     <meta name="description" content="Hoang Phan's personal blog - insights, tutorials, and stories about technology, programming, and life.">
     <meta name="author" content="Hoang Phan">
     <title>Hoang Phan - Personal Blog</title>
+    
+    <!-- Auto-generated posts data -->
+    <script src="posts.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -186,41 +190,40 @@
             gap: 1rem;
         }
 
-        .series-item {
+        .series-group {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: 12px;
-            padding: 1.25rem 1.5rem;
-            text-decoration: none;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            transition: all 0.3s ease;
-            position: relative;
             overflow: hidden;
+            transition: all 0.3s ease;
         }
 
-        .series-item::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 4px;
-            background: var(--primary-color);
-            transform: scaleY(0);
-            transition: transform 0.3s ease;
-        }
-
-        .series-item:hover {
-            transform: translateX(8px);
+        .series-group:hover {
             box-shadow: var(--shadow);
             border-color: var(--primary-color);
         }
 
-        .series-item:hover::before {
-            transform: scaleY(1);
+        .series-header {
+            padding: 1.25rem 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            position: relative;
+            user-select: none;
+        }
+
+        .series-header::after {
+            content: '▼';
+            position: absolute;
+            right: 1.5rem;
+            font-size: 0.8rem;
+            color: var(--primary-color);
+            transition: transform 0.3s ease;
+        }
+
+        .series-header.collapsed::after {
+            transform: rotate(-90deg);
         }
 
         .series-icon {
@@ -238,6 +241,76 @@
         .series-content p {
             font-size: 0.9rem;
             color: var(--text-secondary);
+        }
+
+        .series-posts {
+            max-height: 500px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, padding 0.3s ease;
+            padding: 0 1.5rem 1rem 1.5rem;
+        }
+
+        .series-posts.collapsed {
+            max-height: 0;
+            padding: 0 1.5rem;
+        }
+
+        .post-item {
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .post-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--primary-color);
+            transform: scaleY(0);
+            transition: transform 0.2s ease;
+            border-radius: 8px 0 0 8px;
+        }
+
+        .post-item:hover {
+            transform: translateX(5px);
+            border-color: var(--primary-color);
+        }
+
+        .post-item:hover::before {
+            transform: scaleY(1);
+        }
+
+        .post-number {
+            font-weight: 600;
+            color: var(--primary-color);
+            min-width: 30px;
+            font-size: 0.9rem;
+        }
+
+        .post-title {
+            flex: 1;
+            font-size: 0.95rem;
+        }
+
+        .post-count {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
         }
 
         .categories {
@@ -381,28 +454,18 @@
                     <span class="icon">📝</span>
                     Post Series
                 </h2>
-                <div class="series-list">
-                    <a href="design-system/1.dragonfly.html" class="series-item">
-                        <div class="series-icon">🎨</div>
-                        <div class="series-content">
-                            <h3>Design System Series</h3>
-                            <p>Exploring modern design patterns and system architecture</p>
-                        </div>
-                    </a>
-                    <a href="lang-chain-series/part-1-my-first-experience-with-langchain.html" class="series-item">
-                        <div class="series-icon">🔗</div>
-                        <div class="series-content">
-                            <h3>Lang Chain Series</h3>
-                            <p>Deep dive into LangChain and AI application development</p>
-                        </div>
-                    </a>
-                    <a href="leetcode-series/list-of-content.html" class="series-item">
-                        <div class="series-icon">💻</div>
-                        <div class="series-content">
-                            <h3>Leetcode Series</h3>
-                            <p>Problem-solving techniques and coding challenges</p>
-                        </div>
-                    </a>
+                <div class="series-list" id="seriesList">
+                    <!-- 
+                        Posts are automatically loaded from posts.js
+                        To add a new post:
+                        1. Add your HTML file to the appropriate series directory
+                        2. Run: node build-posts.js (to auto-scan and update)
+                        
+                        The script automatically finds all files in your series folders!
+                    -->
+                    <div class="loading-message" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        Loading posts...
+                    </div>
                 </div>
             </section>
 
@@ -463,6 +526,109 @@
             <p>Feel free to explore and leave your thoughts in the comments.</p>
         </footer>
     </div>
+
+    <script>
+        function toggleSeries(header) {
+            const postsContainer = header.nextElementSibling;
+            const isCollapsed = postsContainer.classList.contains('collapsed');
+            
+            if (isCollapsed) {
+                postsContainer.classList.remove('collapsed');
+                header.classList.remove('collapsed');
+            } else {
+                postsContainer.classList.add('collapsed');
+                header.classList.add('collapsed');
+            }
+        }
+
+        /**
+         * Create HTML for a single post item
+         */
+        function createPostItem(post) {
+            return `
+                <a href="${post.url}" class="post-item">
+                    <span class="post-number">${post.partNumber}</span>
+                    <span class="post-title">${post.title}</span>
+                </a>
+            `;
+        }
+
+        /**
+         * Create HTML for a series group
+         */
+        function createSeriesGroup(seriesData) {
+            const postsHTML = seriesData.posts.map(post => createPostItem(post)).join('');
+            
+            return `
+                <div class="series-group">
+                    <div class="series-header" onclick="toggleSeries(this)">
+                        <div class="series-icon">${seriesData.icon}</div>
+                        <div class="series-content">
+                            <h3>${seriesData.title} <span class="post-count">${seriesData.count}</span></h3>
+                            <p>${seriesData.description}</p>
+                        </div>
+                    </div>
+                    <div class="series-posts">
+                        ${postsHTML}
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Render posts from the loaded data
+         */
+        function renderPosts() {
+            const seriesList = document.getElementById('seriesList');
+            
+            try {
+                // Check if posts data is loaded
+                if (typeof window.POSTS_DATA === 'undefined') {
+                    throw new Error('Posts data not loaded');
+                }
+                
+                const postsData = window.POSTS_DATA;
+                
+                // Generate HTML for all series
+                const seriesHTML = Object.values(postsData)
+                    .map(series => createSeriesGroup(series))
+                    .join('');
+                
+                // Update the DOM
+                seriesList.innerHTML = seriesHTML;
+                
+                console.log('✅ Posts loaded successfully');
+                console.log(`📚 Total series: ${Object.keys(postsData).length}`);
+                console.log(`📝 Total posts: ${Object.values(postsData).reduce((sum, s) => sum + s.count, 0)}`);
+            } catch (error) {
+                console.error('Error rendering posts:', error);
+                seriesList.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        <p style="color: #e74c3c; font-weight: 600;">⚠️ Failed to load posts</p>
+                        <p style="font-size: 0.9rem;">Please check the console for details.</p>
+                        <p style="font-size: 0.85rem; margin-top: 1rem;">Make sure posts.js is generated by running: <code>node build-posts.js</code></p>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            renderPosts();
+            
+            // If you want series collapsed by default, uncomment:
+            /*
+            setTimeout(() => {
+                const allHeaders = document.querySelectorAll('.series-header');
+                allHeaders.forEach(header => {
+                    const postsContainer = header.nextElementSibling;
+                    postsContainer.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                });
+            }, 100);
+            */
+        });
+    </script>
 </body>
 </html>
 

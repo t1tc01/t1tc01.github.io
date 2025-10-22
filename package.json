@@ -1,0 +1,13 @@
+{
+  "name": "t1tc01-github-io",
+  "version": "1.0.0",
+  "description": "Personal blog with auto-generated post listings",
+  "scripts": {
+    "build": "node build-posts.js",
+    "update": "node build-posts.js"
+  },
+  "keywords": ["blog", "portfolio"],
+  "author": "Hoang Phan",
+  "license": "MIT"
+}
+
