@@ -1,5 +1,5 @@
 // Auto-generated file - DO NOT EDIT MANUALLY
-// Generated on: 2025-10-22T03:52:16.198Z
+// Generated on: 2025-10-23T07:29:32.718Z
 // Run 'node build-posts.js' to regenerate this file
 
 /**
@@ -11,7 +11,7 @@ const postsData = {
     "icon": "🎨",
     "title": "Design System Series",
     "description": "Posts and articles about Design System",
-    "count": 2,
+    "count": 3,
     "posts": [
       {
         "file": "1.dragonfly.html",
@@ -24,6 +24,12 @@ const postsData = {
         "url": "design-system/2.dragonfly-architecture.html",
         "title": "Design System - Part 2: Dragonfly Architecture Deep Dive",
         "partNumber": "Part 2"
+      },
+      {
+        "file": "3.dataformular.html",
+        "url": "design-system/3.dataformular.html",
+        "title": "Design System - Part 3: Data Formulator - Visualization and Data Exploration with LLM",
+        "partNumber": "Part 3"
       }
     ]
   },

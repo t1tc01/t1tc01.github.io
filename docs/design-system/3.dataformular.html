@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design System - Part 3: Data Formulator - Visualization and Data Exploration with LLM</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --text-color: #1f2937;
+            --code-bg: #f3f4f6;
+            --border-color: #e5e7eb;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            background-color: #ffffff;
+        }
+
+        h1, h2, h3 {
+            color: var(--primary-color);
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        h1 { font-size: 2.5rem; }
+        h2 { font-size: 2rem; }
+        h3 { font-size: 1.5rem; }
+
+        pre {
+            background-color: var(--code-bg);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        code {
+            background-color: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        th {
+            background-color: var(--code-bg);
+        }
+
+        .nav {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: white;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .nav a {
+            display: block;
+            color: var(--primary-color);
+            text-decoration: none;
+            margin: 0.5rem 0;
+        }
+
+        .nav a:hover {
+            color: var(--secondary-color);
+            text-decoration: underline;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid var(--border-color);
+            margin: 2rem 0;
+        }
+
+        .emoji {
+            font-size: 1.2em;
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="#architecture">🏗️ Architecture</a>
+        <a href="#core-files">📁 Core Files</a>
+        <a href="#ai-agents">🤖 AI Agents</a>
+        <a href="#data-loaders">🔌 Data Loaders</a>
+        <a href="#workflow">🔄 Workflow</a>
+        <a href="#patterns">🔑 Patterns</a>
+        <a href="#summary">🎯 Summary</a>
+    </nav>
+
+    <main>
+        <h1 id="overview"><span class="emoji">📊</span>Data Formulator Backend - Easy Overview</h1>
+
+        <h2 id="architecture"><span class="emoji">🏗️</span>Architecture Overview
+
+        <p>The Data Formulator backend is a <strong>Flask-based Python application</strong> that helps users transform, analyze, and visualize data using AI agents. Think of it as a smart data assistant with multiple specialized "brains" (agents) for different tasks.</p>
+
+        <h3>Main Components:</h3>
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Flask App (app.py)                   │
+│  - Session Management                                    │
+│  - API Configuration                                     │
+│  - Static File Serving                                   │
+└─────────────────────────────────────────────────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│  Agent Routes│  │ Table Routes │  │  SSE Routes  │
+│ (AI Agents)  │  │ (Data Mgmt)  │  │ (Real-time)  │
+└──────────────┘  └──────────────┘  └──────────────┘
+        │                  │
+        ▼                  ▼
+┌──────────────┐  ┌──────────────┐
+│  AI Models   │  │  DuckDB      │
+│ (OpenAI,etc) │  │  Database    │
+└──────────────┘  └──────────────┘
+```
+
+---
+
+        <h2 id="core-files"><span class="emoji">📁</span>Core Files Breakdown
+
+### 1. **`app.py`** - The Main Application 🚀
+**What it does:**
+- Initializes the Flask web server
+- Manages user sessions (each user gets a unique session ID)
+- Loads environment variables (API keys, configs)
+- Registers three main blueprints (route modules)
+- Serves static files (the frontend)
+
+**Key Functions:**
+- `get_session_id()` - Creates/retrieves user sessions
+- `get_app_config()` - Provides frontend configuration
+- `get_example_dataset_list()` - Loads sample datasets (gapminder, movies, etc.)
+
+---
+
+### 2. **`agent_routes.py`** - AI Agent Endpoints 🤖
+**What it does:**
+- Provides API endpoints to interact with various AI agents
+- Handles model configuration (OpenAI, Azure, Anthropic, Gemini, Ollama)
+- Tests and validates AI models
+- Processes user requests for data transformations, cleaning, sorting, etc.
+
+**Key Endpoints:**
+
+| Endpoint | What It Does |
+|----------|-------------|
+| `/check-available-models` | Scans which AI models are available & working |
+| `/test-model` | Tests if a specific AI model is responsive |
+| `/process-data-on-load` | AI suggests data cleaning when loading data |
+| `/derive-data` | AI transforms data based on natural language |
+| `/refine-data` | AI refines previous transformations |
+| `/derive-py-concept` | AI creates Python functions for new columns |
+| `/clean-data` | AI cleans messy data |
+| `/sort-data` | AI intelligently sorts data |
+| `/code-expl` | AI explains generated code |
+| `/query-completion` | AI helps complete SQL/data queries |
+
+---
+
+### 3. **`tables_routes.py`** - Database Management 📊
+**What it does:**
+- Manages all table/data operations using DuckDB
+- Handles file uploads (CSV, Excel, JSON)
+- Executes queries and provides data samples
+- Integrates with external data sources
+
+**Key Endpoints:**
+
+| Endpoint | What It Does |
+|----------|-------------|
+| `/list-tables` | Lists all tables in user's session |
+| `/create-table` | Creates table from uploaded file |
+| `/get-table` | Retrieves paginated table data |
+| `/sample-table` | Gets random/head/bottom samples |
+| `/query` | Executes SQL queries |
+| `/analyze` | Provides statistics (min, max, avg, etc.) |
+| `/delete-table` | Drops tables or views |
+| `/upload-db-file` | Uploads a DuckDB file |
+| `/download-db-file` | Downloads session database |
+| `/reset-db-file` | Clears session database |
+| `/data-loader/*` | Connects to external data sources |
+
+---
+
+### 4. **`sse_routes.py`** - Real-Time Communication 📡
+**What it does:**
+- Implements **Server-Sent Events (SSE)** for real-time updates
+- Allows server to push updates to the client without polling
+- Maintains persistent connections with heartbeats
+
+**Key Endpoints:**
+- `/connect` - Establishes SSE connection
+- `/send-message` - Sends messages to specific sessions
+- `/broadcast` - Sends messages to all connected clients
+- `/status` - Shows connection status
+
+---
+
+### 5. **`db_manager.py`** - Database Connection Manager 🗄️
+**What it does:**
+- Manages DuckDB connections per session
+- Each user gets their own isolated database file
+- Provides context managers for safe connection handling
+
+**Key Features:**
+- Creates temporary database files per session
+- Auto-closes connections to prevent leaks
+- Stores databases in temp directory or custom location
+
+---
+
+### 6. **`py_sandbox.py`** - Safe Code Execution 🔒
+**What it does:**
+- Executes AI-generated Python code safely
+- Prevents malicious code from accessing files or system
+- Can run in subprocess (safer) or main process (faster)
+
+**Security Features:**
+- Blocks file writing
+- Blocks subprocess/system calls
+- Only allows safe Python libraries (pandas, numpy, etc.)
+- Uses audit hooks to monitor dangerous operations
+
+---
+
+        <h2 id="ai-agents"><span class="emoji">🤖</span>AI Agents (in `/agents` folder)
+
+The system has **multiple specialized AI agents**, each an expert at one task:
+
+| Agent | Purpose |
+|-------|---------|
+| **PythonDataTransformationAgent** | Transforms data using Python code |
+| **SQLDataTransformationAgent** | Transforms data using SQL queries |
+| **PythonDataRecAgent** | Recommends data transformations |
+| **SQLDataRecAgent** | Recommends SQL-based transformations |
+| **DataLoadAgent** | Helps load and prepare data |
+| **DataCleanAgent** | Cleans messy/raw data |
+| **PyConceptDeriveAgent** | Creates new calculated columns |
+| **ConceptDeriveAgent** | Derives new concepts from data |
+| **SortDataAgent** | Intelligently sorts data |
+| **CodeExplanationAgent** | Explains generated code |
+| **QueryCompletionAgent** | Helps complete queries |
+
+---
+
+        <h2 id="data-loaders"><span class="emoji">🔌</span>Data Loaders (in `/data_loader` folder)
+
+Connect to external data sources:
+
+- **PostgreSQL** - Connect to PostgreSQL databases
+- **MySQL** - Connect to MySQL databases
+- **MSSQL** - Connect to SQL Server
+- **Kusto** - Connect to Azure Data Explorer
+- **S3** - Load data from AWS S3 buckets
+- **Azure Blob** - Load data from Azure Blob Storage
+
+---
+
+        <h2 id="workflow"><span class="emoji">🔄</span>How It All Works Together
+
+### Example Flow: "Calculate 7-day moving average"
+
+1. **Frontend** sends request to `/api/agent/derive-data`
+2. **agent_routes.py** receives the request
+3. **PythonDataTransformationAgent** is initialized
+4. Agent sends prompt to **AI Model** (e.g., GPT-4)
+5. AI generates Python code:
+   ```python
+   def transform_data(df):
+       df['7-day avg'] = df['Cases'].rolling(7).mean()
+       return df
+   ```
+6. **py_sandbox.py** executes code safely
+7. Results saved to **DuckDB** via **db_manager**
+8. Response sent back to frontend
+9. **SSE** can push updates in real-time
+
+---
+
+        <h2 id="patterns"><span class="emoji">🔑</span>Key Design Patterns
+
+### 1. **Blueprint Architecture**
+Flask blueprints organize routes into logical modules:
+- `agent_bp` - AI operations
+- `tables_bp` - Data management
+- `sse_bp` - Real-time communication
+
+### 2. **Session Isolation**
+Each user gets:
+- Unique session ID
+- Separate DuckDB database
+- Isolated data and transformations
+
+### 3. **Agent Pattern**
+Each agent follows the same structure:
+- `__init__()` - Setup with AI client
+- `run()` - Main execution
+- `followup()` - Iterative refinement
+- `process_gpt_response()` - Handle AI output
+
+### 4. **Safety First**
+- Sandboxed code execution
+- SQL injection prevention
+- Error message sanitization
+- API key protection
+
+---
+
+        <h2 id="summary"><span class="emoji">🎯</span>Summary</h2>
+
+        <p><strong>In simple terms:</strong> Data Formulator's backend is like a <strong>smart data assistant</strong> that:</p>
+
+        <ol>
+            <li><span class="emoji">🗄️</span><strong>Stores your data</strong> in an isolated database (DuckDB)</li>
+            <li><span class="emoji">🤖</span><strong>Uses AI</strong> to understand what you want to do with your data</li>
+            <li><span class="emoji">💻</span><strong>Generates code</strong> (Python/SQL) to transform your data</li>
+            <li><span class="emoji">🔒</span><strong>Safely executes</strong> that code in a sandbox</li>
+            <li><span class="emoji">📊</span><strong>Returns results</strong> back to you</li>
+            <li><span class="emoji">📡</span><strong>Updates you in real-time</strong> via SSE</li>
+            <li><span class="emoji">🔌</span><strong>Connects to external data</strong> when needed</li>
+        </ol>
+
+        <p>All while keeping your data <strong>private</strong> and <strong>secure</strong>!</p>
+    </main>
+</body>
+</html>
