@@ -4,7 +4,9 @@
     "icon": "Building2",
     "root": true,
     "pages": [
-      "index"
+      "index",
+      "dragonfly",
+      "review-code"
     ]
   }
   

@@ -1,0 +1,338 @@
+---
+title: "PostgreSQL: Kiến Trúc, Vacuum, Query Optimization và So Sánh với MySQL/Oracle"
+description: "PostgreSQL là một trong những hệ quản trị cơ sở dữ liệu quan hệ mã nguồn mở mạnh mẽ nhất hiện nay. Bài viết này sẽ đi sâu vào kiến trúc tổng thể, cơ chế Vacuum, tối ưu hóa truy vấn, và so sánh với các hệ thống cơ sở dữ liệu phổ biến khác như MySQL và Oracle."
+---
+# PostgreSQL: Kiến Trúc, Vacuum, Query Optimization và So Sánh với MySQL/Oracle
+
+PostgreSQL là một trong những hệ quản trị cơ sở dữ liệu quan hệ mã nguồn mở mạnh mẽ nhất hiện nay. Bài viết này sẽ đi sâu vào kiến trúc tổng thể, cơ chế Vacuum, tối ưu hóa truy vấn, và so sánh với các hệ thống cơ sở dữ liệu phổ biến khác như MySQL và Oracle.
+
+## 1. PostgreSQL Kiến Trúc Tổng Thể
+
+### 1.1. Process Model và Memory Management
+
+PostgreSQL sử dụng kiến trúc **process-per-connection**, trong đó `postmaster` (process chính) quản lý các `backend processes`. Mỗi kết nối client sẽ được xử lý bởi một backend process riêng biệt, đảm bảo tính cô lập và ổn định.
+
+Về quản lý bộ nhớ, PostgreSQL chia thành hai loại chính:
+
+- **Local Memory**: Mỗi backend process có vùng nhớ riêng
+  - `work_mem`: Dùng cho các thao tác sort và join trong mỗi operation
+  - `maintenance_work_mem`: Dùng cho các thao tác VACUUM, REINDEX, CREATE INDEX
+- **Shared Memory**: Chia sẻ giữa tất cả các processes
+  - `shared_buffers`: Cache các pages từ disk vào memory, giảm I/O operations
+  - `wal_buffers`: Buffer cho Write-Ahead Logging
+
+### 1.2. Data Storage và WAL (Write-Ahead Logging)
+
+Dữ liệu trong PostgreSQL được lưu trữ trong:
+
+- **Heap files**: Lưu trữ dữ liệu chính của tables
+- **Index files**: Lưu trữ các index structures (B-tree, GIN, GiST, etc.)
+- **WAL (Write-Ahead Logging)**: Đảm bảo durability - mọi thay đổi được ghi vào WAL trước khi commit
+
+WAL đóng vai trò quan trọng trong việc đảm bảo tính bền vững của dữ liệu. Khi có transaction, thay đổi được ghi vào WAL trước, sau đó mới được áp dụng vào data files. Điều này cho phép PostgreSQL phục hồi dữ liệu sau khi crash.
+
+### 1.3. Checkpoints và I/O Management
+
+**Checkpoints** là quá trình flush các dirty pages từ `shared_buffers` ra disk. Các tham số quan trọng:
+
+- `checkpoint_timeout`: Khoảng thời gian giữa các checkpoints
+- `max_wal_size`: Giới hạn kích thước WAL trước khi force checkpoint
+
+Nếu checkpoint không hiệu quả, WAL segments sẽ tích tụ, dẫn đến tăng disk usage và có thể ảnh hưởng đến performance.
+
+### 1.4. Cấu Hình Quan Trọng trong postgresql.conf
+
+| Tham số | Mô tả | Khuyến nghị |
+|---------|-------|-------------|
+| `shared_buffers` | Kích thước shared memory buffer | 25% RAM (khuyến nghị) |
+| `effective_cache_size` | Ước tính cache có sẵn cho OS và PostgreSQL | 50-75% RAM |
+| `work_mem` | Memory cho mỗi sort/join operation | 4MB (tùy workload) |
+| `maintenance_work_mem` | Memory cho VACUUM, CREATE INDEX | 1GB hoặc cao hơn |
+| `wal_buffers` | Buffer size cho WAL | 16MB (auto-tuned từ PostgreSQL 9.1+) |
+| `checkpoint_timeout` | Thời gian giữa các checkpoints | 5-15 phút |
+| `max_wal_size` | Giới hạn WAL size trước checkpoint | 1-4GB |
+
+## 2. Vacuum: Triết Lý và Hoạt Động
+
+### 2.1. Tại Sao Cần Vacuum?
+
+PostgreSQL sử dụng **MVCC (Multi-Version Concurrency Control)** để đảm bảo transaction isolation. Khi có UPDATE hoặc DELETE, PostgreSQL không xóa dữ liệu ngay lập tức mà tạo row version mới. Các row version cũ trở thành **dead tuples**.
+
+Vacuum đóng vai trò như một **garbage collector** bắt buộc để:
+
+- **Reclaim space**: Đánh dấu dead tuples có thể tái sử dụng
+- **Update visibility map**: Hỗ trợ index-only scans hiệu quả hơn
+- **Freeze XID**: Tránh transaction ID wraparound (vấn đề nghiêm trọng có thể khiến database không hoạt động)
+
+### 2.2. Triết Lý của Vacuum
+
+Vacuum được thiết kế với triết lý **non-blocking**:
+
+- Không block reads/writes - các transaction khác vẫn có thể hoạt động bình thường
+- **Autovacuum** tự động trigger dựa trên:
+  - `scale_factor`: Tỷ lệ dead tuples (mặc định 0.1 = 10%)
+  - `n_dead_tuples`: Số lượng dead tuples tuyệt đối
+
+> **Lưu ý quan trọng**: `VACUUM FULL` khác với `VACUUM` thông thường. `VACUUM FULL` sẽ rewrite toàn bộ table để compact hoàn toàn, nhưng nó là **blocking operation** và nên tránh trong production nếu không cần thiết.
+
+### 2.3. Hậu Quả Khi Thiếu Vacuum
+
+- **Bloat**: Tables và indexes phình to, chiếm nhiều disk space không cần thiết
+- **Query chậm**: Phải scan qua nhiều dead tuples
+- **Disk đầy**: Không thể reclaim space
+- **XID wraparound**: Database có thể ngừng hoạt động
+
+### 2.4. Monitoring Vacuum
+
+Để monitor vacuum, sử dụng các views:
+
+- `pg_stat_user_tables`: Thống kê về tables, số dead tuples, last vacuum time
+- `pg_stat_progress_vacuum`: Tiến trình của vacuum đang chạy
+
+## 3. Query Execution và Tối Ưu Hóa
+
+### 3.1. Lifecycle của một Query
+
+Khi một SQL query được gửi đến PostgreSQL, nó trải qua các giai đoạn sau:
+
+1. **Parser**: Phân tích syntax, tạo parse tree
+2. **Analyzer**: Rewrite query, kiểm tra privileges, tạo query tree
+3. **Planner/Optimizer**: Tạo execution plan dựa trên:
+   - Statistics từ `pg_statistic`
+   - Cost estimation cho các operations
+   - Chọn lựa giữa sequential scan, index scan, các loại join
+4. **Executor**: Thực thi plan đã được tối ưu
+
+### 3.2. Execution Plans
+
+Sử dụng `EXPLAIN ANALYZE` để xem execution plan và thời gian thực tế:
+
+```sql
+EXPLAIN ANALYZE SELECT * FROM users WHERE email = 'user@example.com';
+```
+
+Các loại scan phổ biến:
+
+- **Sequential Scan**: Scan toàn bộ table (phù hợp khi table nhỏ hoặc không có index phù hợp)
+- **Index Scan**: Sử dụng index để tìm rows nhanh hơn
+- **Index-Only Scan**: Chỉ đọc từ index, không cần truy cập table (khi tất cả columns cần thiết đều có trong index)
+
+### 3.3. Join Strategies
+
+PostgreSQL hỗ trợ ba loại join algorithms:
+
+- **Nested Loop Join**: Phù hợp khi một trong hai table nhỏ
+- **Hash Join**: Build hash table từ một table, probe từ table kia (phù hợp khi không có index hoặc table lớn)
+- **Merge Join**: Phù hợp khi cả hai tables đã được sort
+
+### 3.4. Parallel Query
+
+Từ PostgreSQL 10+, hỗ trợ parallel query execution để tận dụng nhiều CPU cores. Vectorized execution giúp giảm overhead và tăng throughput.
+
+### 3.5. Tối Ưu Hóa Performance
+
+Các yếu tố ảnh hưởng đến performance:
+
+- **Hardware**: SSD > HDD, RAM cao, nhiều CPU cores
+- **Configuration**: `work_mem` cho mỗi operation, `shared_buffers` cho caching
+- **Indexes**: Chọn index phù hợp với query patterns
+- **Avoid full scans**: Tránh full table scans trên tables lớn
+
+### 3.6. Locks và Concurrency
+
+SELECT thông thường không lock rows. Lock chỉ xảy ra khi sử dụng:
+
+- `SELECT ... FOR UPDATE`: Exclusive lock, block concurrent UPDATE/DELETE
+- `SELECT ... FOR SHARE`: Shared lock
+
+UPDATE/DELETE tự động acquire `RowExclusiveLock` trên rows được modify.
+
+## 4. Index và Performance Factors
+
+### 4.1. Các Loại Index trong PostgreSQL
+
+<table>
+  <thead>
+    <tr>
+      <th>Loại Index</th>
+      <th>Use Cases</th>
+      <th>Đặc điểm</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>B-tree</strong> (default)</td>
+      <td>Equality, range queries (=, &lt;&gt;, BETWEEN, &lt;, &gt;)</td>
+      <td>Index mặc định, phù hợp cho hầu hết cases</td>
+    </tr>
+    <tr>
+      <td><strong>Hash</strong></td>
+      <td>Equality only (=)</td>
+      <td>Nhanh hơn B-tree cho equality, nhưng không hỗ trợ range</td>
+    </tr>
+    <tr>
+      <td><strong>GIN</strong></td>
+      <td>JSON, arrays, full-text search (@&gt; operator)</td>
+      <td>Generalized Inverted Index, phù hợp cho composite data</td>
+    </tr>
+    <tr>
+      <td><strong>GiST / SP-GiST</strong></td>
+      <td>Geospatial data, custom data types</td>
+      <td>Generalized Search Tree, linh hoạt cho nhiều loại data</td>
+    </tr>
+    <tr>
+      <td><strong>BRIN</strong></td>
+      <td>Large sequential data, time-series</td>
+      <td>Block Range Index, tiết kiệm space cho data có thứ tự</td>
+    </tr>
+  </tbody>
+</table>
+
+### 4.2. Chọn Index Phù Hợp
+
+- **GIN cho tsvector**: Full-text search hiệu quả
+- **BRIN cho time-series**: Tiết kiệm space đáng kể
+- **Chỉ index 5-10% columns**: Index quá nhiều sẽ làm chậm writes
+- **Monitor usage**: Sử dụng `pg_stat_user_indexes` để xem index nào được sử dụng
+
+### 4.3. Các Yếu Tố Tăng Performance Database
+
+- **Stats cập nhật**: Chạy `ANALYZE` thường xuyên để planner có thông tin chính xác
+- **Hardware**: NVMe SSD, nhiều CPU cores, RAM cao
+- **Config tuning**: `maintenance_work_mem` cao cho index build nhanh hơn
+- **Partitioning**: Partition tables lớn để giảm scan size
+- **Connection pooling**: Sử dụng pgbouncer để giảm overhead của connections
+
+## 5. So Sánh Với MySQL/Oracle (Senior Level)
+
+| Tiêu Chí | PostgreSQL | MySQL | Oracle |
+|----------|------------|-------|--------|
+| **MVCC & Concurrency** | True MVCC, Vacuum tự động, non-blocking reads | Statement/Row-based, dễ bloat hơn | Advanced MVCC, ít Vacuum cần thiết |
+| **Features** | JSON native index, CTE recursive, extensions (PostGIS) | Nhẹ, read-heavy nhanh, JSON cơ bản | Enterprise: RAC clustering, PL/SQL mạnh |
+| **Scaling** | Logical replication, Citus sharding (third-party), free | Group replication multi-master | Real Application Clusters active-active |
+| **Workload** | Complex writes/queries, ACID strict | Simple read-heavy web apps | High-throughput enterprise |
+| **Usability** | Case-sensitive, strict GROUP BY | Case-insensitive, forgiving syntax | Proprietary, license đắt |
+
+### 5.1. PostgreSQL vs MySQL
+
+PostgreSQL vượt trội MySQL ở:
+
+- Complex queries và stored procedures đa ngôn ngữ
+- Replication linh hoạt hơn
+- ACID compliance nghiêm ngặt hơn
+- Advanced data types (JSON, arrays, custom types)
+
+MySQL phù hợp hơn cho:
+
+- Simple read-heavy web applications
+- Deployment nhanh, dễ dàng
+- Ecosystem lớn, nhiều tools hỗ trợ
+
+### 5.2. PostgreSQL vs Oracle
+
+PostgreSQL:
+
+- Open-source, miễn phí
+- Community-driven, phát triển nhanh
+- Migration từ Oracle cần rewrite PL/SQL
+
+Oracle:
+
+- Native scaling tốt hơn với RAC
+- Enterprise features mạnh mẽ
+- License đắt, phù hợp enterprise lớn
+- PL/SQL ecosystem phong phú
+
+## 6. Giải Thích Thuật Ngữ và Khái Niệm
+
+Dưới đây là giải thích chi tiết các thuật ngữ quan trọng xuất hiện trong bài viết, giúp bạn hiểu sâu hơn về cách PostgreSQL hoạt động:
+
+### 6.1. Kiến Trúc và Process
+
+- **Process-per-connection architecture**: Kiến trúc mà mỗi kết nối client tới PostgreSQL đều được tạo một tiến trình (process) riêng để xử lý. Một tiến trình gọi là Postmaster quản lý các tiến trình con, từ đó mỗi user connection có backend process riêng làm việc độc lập. Điều này đảm bảo tính cô lập giữa các connections và ổn định của hệ thống.
+
+- **Postmaster Process**: Tiến trình cha đầu tiên của PostgreSQL quản lý việc khởi động, dừng các tiến trình khác và tạo tiến trình backend cho mỗi client kết nối. Postmaster là process đầu tiên được khởi động khi PostgreSQL start.
+
+- **Backend Process**: Tiến trình xử lý câu truy vấn thực tế cho mỗi client kết nối, thực thi các thao tác truy vấn và trả kết quả. Mỗi connection sẽ có một backend process riêng, đảm bảo không ảnh hưởng lẫn nhau.
+
+### 6.2. Memory Management
+
+- **Work Memory (work_mem)**: Bộ nhớ tạm dùng cho các thao tác trong một truy vấn như sort, hash join, merge join. Cấu hình tham số `work_mem` quyết định bao nhiêu RAM được sử dụng cho các bước xử lý này trước khi phải dùng đĩa. Mỗi operation trong query có thể sử dụng `work_mem` riêng, vì vậy tổng memory có thể lớn hơn giá trị cấu hình.
+
+- **Shared Buffers (shared_buffers)**: Bộ nhớ đệm chia sẻ giữa các tiến trình backend để cache các trang dữ liệu từ file trên disk, giúp giảm I/O vật lý. Khi một page được đọc từ disk, nó được lưu trong shared_buffers để các queries khác có thể sử dụng lại mà không cần đọc lại từ disk.
+
+### 6.3. WAL và Durability
+
+- **WAL (Write-Ahead Logging)**: Cơ chế ghi log các thay đổi trước khi ghi ra dữ liệu thực tế, đảm bảo tính an toàn (durability) của giao dịch. WAL lưu ở thư mục `pg_wal` và được ghi đồng bộ nhờ WAL writer process. Khi có transaction commit, thay đổi được ghi vào WAL trước, sau đó mới được áp dụng vào data files. Điều này cho phép PostgreSQL phục hồi dữ liệu sau khi crash.
+
+- **Checkpoint**: Quá trình ghi đồng bộ dữ liệu từ bộ nhớ đệm (shared_buffers) xuống file trên đĩa, giúp dữ liệu luôn được cập nhật ổn định và giảm thời gian phục hồi khi khôi phục. Checkpoint đảm bảo tất cả dirty pages được flush ra disk, và WAL segments cũ hơn checkpoint có thể được xóa hoặc archive.
+
+### 6.4. MVCC và Vacuum
+
+- **MVCC (Multi-Version Concurrency Control)**: Cơ chế quản lý đồng thời truy cập dữ liệu, cho phép nhiều transaction đọc/ghi mà không khóa nhau, tạo ra các version khác nhau của bản ghi tại các thời điểm. Khi một row được UPDATE, PostgreSQL tạo một version mới thay vì xóa version cũ ngay lập tức. Các transactions cũ vẫn có thể đọc version cũ của row.
+
+- **Vacuum**: Quy trình dọn dẹp dữ liệu thừa trong PostgreSQL do cơ chế MVCC tạo ra nhiều bản sao dữ liệu cũ. Vacuum thu hồi không gian trống, tránh tăng bộ nhớ ảo và bloat. Vacuum đánh dấu dead tuples có thể tái sử dụng, update visibility map, và freeze transaction IDs để tránh wraparound.
+
+- **Autovacuum**: Quá trình tự động kích hoạt Vacuum khi cần dựa trên thống kê số bản ghi chết và các ngưỡng tham số, giúp bảo trì bảng dữ liệu liên tục mà không cần can thiệp thủ công. Autovacuum monitor các tables và tự động chạy vacuum khi số dead tuples vượt ngưỡng (mặc định là 10% số rows + 50 dead tuples).
+
+### 6.5. Query Execution
+
+- **Execution Plan**: Kế hoạch thực thi câu lệnh SQL do trình tối ưu tạo ra sau khi phân tích câu truy vấn. Plan này chỉ ra cách thức truy cập bảng, loại join, index nào được dùng để trả kết quả. Sử dụng `EXPLAIN` hoặc `EXPLAIN ANALYZE` để xem execution plan và hiểu cách PostgreSQL sẽ thực thi query.
+
+### 6.6. Index Types
+
+- **Index Types (B-tree, GIN, GiST, BRIN, Hash)**: Các kiểu cấu trúc chỉ mục khác nhau phục vụ mục đích truy vấn khác nhau:
+  - **B-tree**: Phổ biến cho các phép so sánh bằng, lớn hơn, nhỏ hơn (=, &lt;, &gt;, BETWEEN); là loại chỉ mục mặc định của PostgreSQL.
+  - **GIN (Generalized Inverted Index)**: Dùng cho dữ liệu phức tạp như JSON, mảng (arrays), và tìm kiếm toàn văn bản (full-text search).
+  - **GiST (Generalized Search Tree)**: Phù hợp cho dữ liệu không gian (spatial), dữ liệu hình học (geometric), và các kiểu dữ liệu mở rộng/custom.
+  - **BRIN (Block Range Index)**: Thích hợp với bảng rất lớn và dữ liệu tuần tự; giúp tiết kiệm không gian lưu trữ đáng kể.
+  - **Hash**: Chỉ hỗ trợ so sánh bằng (=), tối ưu cho truy vấn kiểm tra chính xác (equality); không hỗ trợ truy vấn phạm vi (range queries).
+
+
+### 6.7. Locks và Concurrency
+
+- **RowExclusiveLock**: Một loại khóa trên hàng dữ liệu trong PostgreSQL đảm bảo việc thay đổi dữ liệu trong transaction, thường xuất hiện khi dùng `SELECT FOR UPDATE` làm khóa dòng để tránh dữ liệu bị sửa đồng thời. UPDATE và DELETE tự động acquire RowExclusiveLock trên các rows được modify.
+
+Những thuật ngữ này là nền tảng cơ bản và nâng cao để hiểu sâu cách mà PostgreSQL hoạt động và được tối ưu trong thực tế vận hành chuyên nghiệp.
+
+## Kết Luận
+
+PostgreSQL là một hệ quản trị cơ sở dữ liệu mạnh mẽ với kiến trúc process-per-connection, cơ chế MVCC và Vacuum tự động, cùng khả năng tối ưu hóa query linh hoạt. Hiểu rõ kiến trúc, cơ chế Vacuum, và cách tối ưu hóa sẽ giúp bạn vận hành PostgreSQL hiệu quả trong production environment.
+
+Việc so sánh với MySQL và Oracle cho thấy mỗi hệ thống có điểm mạnh riêng, và việc lựa chọn phụ thuộc vào requirements cụ thể của dự án: PostgreSQL phù hợp cho complex queries và ACID strict, MySQL cho simple read-heavy apps, và Oracle cho enterprise high-throughput workloads.
+
+## Tài Liệu Tham Khảo
+
+1. [Architecture and Tuning Memory in PostgreSQL Databases](https://severalnines.com/blog/architecture-and-tuning-memory-postgresql-databases/)
+2. [PostgreSQL Runtime Configuration - Resource Consumption](https://www.postgresql.org/docs/current/runtime-config-resource.html)
+3. [PostgreSQL Memory Management](https://www.dingyuqi.com/en/article/postgres-memory-management/)
+4. [PostgreSQL WAL Configuration](https://www.postgresql.org/docs/current/wal-configuration.html)
+5. [Are PostgreSQL data files only written to disk during checkpoint?](https://stackoverflow.com/questions/78304405/are-postgresql-data-files-only-written-to-disk-during-checkpoint)
+6. [Five Reasons Why WAL Segments Accumulate in the pg_wal Directory](https://www.percona.com/blog/five-reasons-why-wal-segments-accumulate-in-the-pg_wal-directory-in-postgresql/)
+7. [Tuning PostgreSQL Database Parameters to Optimize Performance](https://www.percona.com/blog/tuning-postgresql-database-parameters-to-optimize-performance/)
+8. [How Does the Vacuum Process Work in PostgreSQL](https://www.cybrosys.com/research-and-development/postgres/how-does-the-vacuum-process-work-in-postgresql)
+9. [PostgreSQL Autovacuum](https://www.geeksforgeeks.org/postgresql/postgresql-autovacuum/)
+10. [PostgreSQL Interview Guide](https://www.secondtalent.com/interview-guide/postgresql/)
+11. [Deep Dive into PostgreSQL Vacuum Garbage Collector](https://cloud.google.com/blog/products/databases/deep-dive-into-postgresql-vacuum-garbage-collector)
+12. [Lifecycle of a Query in PostgreSQL](https://shiviyer.hashnode.dev/lifecycle-of-a-query-in-postgresql)
+13. [PostgreSQL Locks](https://hevodata.com/learn/postgresql-locks/)
+14. [Mastering Parameter-Sensitive Plans in PostgreSQL](https://postgresqlblog.hashnode.dev/mastering-parameter-sensitive-plans-in-postgresql-for-better-query-performance)
+15. [SELECT FOR UPDATE in PostgreSQL](https://haril.dev/en/blog/2024/04/20/select-for-update-in-PostgreSQL)
+16. [PostgreSQL Performance Tuning: Optimizing Database Indexes](https://www.tigerdata.com/learn/postgresql-performance-tuning-optimizing-database-indexes)
+17. [PostgreSQL Index Types](https://www.geeksforgeeks.org/postgresql/postgresql-index-types/)
+18. [SQL Index Types: B-tree, Hash, GiST, SP-GiST, BRIN, and GIN](https://dev.to/jhonoryza/sql-index-types-b-tree-hash-gist-gist-brin-and-gin-44g0)
+19. [PostgreSQL vs MySQL](https://www.bytebase.com/blog/postgres-vs-mysql/)
+20. [The Difference Between MySQL vs PostgreSQL](https://aws.amazon.com/compare/the-difference-between-mysql-vs-postgresql/)
+21. [PostgreSQL vs MySQL: What's the Difference?](https://www.strongdm.com/blog/postgresql-vs-mysql)
+22. [PostgreSQL vs Oracle](https://airbyte.com/data-engineering-resources/postgresql-vs-oracle)
+23. [Cấu Trúc Processes của PostgreSQL](https://www.tranvanbinh.vn/2023/07/cau-truc-processes-cua-postgresql_28.html)
+24. [Kiến Trúc của Cơ Sở Dữ Liệu PostgreSQL](https://www.tranvanbinh.vn/2023/07/kien-truc-cua-co-so-du-lieu-postgresql.html)
+25. [Kiến Trúc của PostgreSQL](https://viblo.asia/p/kien-truc-cua-postgresql-E375zAB1lGW)
+26. [Bên Trong Của PostgreSQL: Kiến Trúc Dựa Trên Tiến Trình](https://www.facebook.com/code4func/posts/b%C3%AAn-trong-c%E1%BB%A7a-postgresql-c%C3%B3-g%C3%AC-ki%E1%BA%BFn-tr%C3%BAc-d%E1%BB%B1a-tr%C3%AAn-ti%E1%BA%BFn-tr%C3%ACnh-process-based-archi/1427032796092830/)
+27. [Nền Tảng Tối Ưu Hóa Cơ Sở Dữ Liệu và Tư Duy Phương Pháp](https://codetreknomad.net/posts/database-optimize/1-nen-tang-toi-uu-hoa-co-so-du-lieu-va-tu-duy-phuong-phap/)
+28. [PostgreSQL Architecture Video](https://www.youtube.com/watch?v=OUlLQK_gN8k)
+29. [Báo Cáo Thảo Luận Về PostgreSQL](https://www.studocu.vn/vn/document/truong-dai-hoc-giao-thong-van-tai/he-quan-tri-csdl-sql/bao-cao-thao-luan-ve-postgresql-nhom-11/141102799)
+30. [How Does PostgreSQL's Memory Usage Scale?](https://www.reddit.com/r/PostgreSQL/comments/brtic9/how_does_postgresqls_memory_usage_scale_on_a/)
+31. [Chương 2 - PostgreSQL Documentation](https://www.scribd.com/document/937818317/Ch%C6%B0%C6%A1ng-2)
+32. [Tài Liệu Phỏng Vấn PostgreSQL](https://www.thanhnamnguyen.dev/tai-lieu/phong-van/co-so-du-lieu/postgresql/)
+

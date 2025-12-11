@@ -5,10 +5,30 @@ icon: Album
 ---
 
 import { File, Folder, Files } from 'fumadocs-ui/components/files';
-import { CpuIcon, PanelsTopLeft, Database, Terminal } from 'lucide-react';
+import { CpuIcon, PanelsTopLeft, Database, Terminal, Code } from 'lucide-react';
 
-# Overview
+# Design System Overview
 
 ## Introduction
 
-We use Figma to build our design system.
+This section covers our design system, architecture reviews, and technical deep dives into various systems and technologies.
+
+## Topics Covered
+
+<Cards>
+
+<Card 
+  icon={<Database className="text-blue-300" />} 
+  title="Dragonfly Series" 
+  description="DragonflyDB architecture, performance comparisons, and implementation details"
+  href="/docs/techniques/design-system/dragonfly"
+/>
+
+<Card 
+  icon={<Code className="text-green-300" />} 
+  title="Code Reviews" 
+  description="Detailed code reviews and architecture analysis of various projects"
+  href="/docs/techniques/design-system/review-code"
+/>
+
+</Cards>

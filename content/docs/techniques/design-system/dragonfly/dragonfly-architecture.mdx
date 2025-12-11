@@ -1,0 +1,374 @@
+---
+title: "Design System - Part 2: Dragonfly Architecture Deep Dive"
+description: "Dive deep into Dragonfly's source code architecture to understand how it achieves 25x higher throughput than Redis. Explore the shared-nothing design, VLL transactions, DASH tables, and innovative memory management that powers this modern in-memory datastore."
+---
+# Design System - Part 2: Dragonfly Architecture Deep Dive
+
+In [Part 1](dragonfly.mdx), we compared DragonflyDB and Redis, showing how Dragonfly achieves up to 25x higher throughput. Now, let's dive deep into the source code to understand **how** Dragonfly's architecture makes this possible.
+
+## Architecture Overview
+
+**Dragonfly** is a modern Redis/Memcached-compatible in-memory datastore built in C++ that achieves exceptional performance through innovative architectural decisions optimized for modern multi-core hardware.
+
+### Core Design Principles
+
+| Principle | Description | Benefit |
+|-----------|-------------|---------|
+| Shared-Nothing Architecture | Partitions data across threads with no shared state | Eliminates lock contention |
+| Lock-Free Transactions | Uses VLL (Very Lightweight Locking) algorithm | High concurrency without spin-locks |
+| Efficient Data Structures | Based on DASH (Dynamic And Scalable Hashing) | Cache-friendly, lock-free reads |
+| Multi-Protocol Support | Redis and Memcached APIs simultaneously | Drop-in replacement flexibility |
+
+## Source Code Structure
+
+The `/src` directory is organized into 4 main components, each with specific responsibilities:
+
+```
+src/
+├── server/      # Main server logic, command handlers, replication
+├── core/        # Core data structures (DASH table, allocators, etc.)
+├── facade/      # Network protocol handlers (Redis RESP, Memcached)
+└── redis/       # Redis C library integration
+```
+
+### 1. Server Layer (`/src/server/`)
+
+Contains 119 .cc files and 92 .h files implementing the main server logic.
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Entry Point | `dfly_main.cc` | Application entry point, initializes everything |
+| Service Orchestrator | `main_service.cc` | Registers ~185 Redis commands |
+| Shard Management | `engine_shard_set.{h,cc}` | Manages the sharded architecture |
+| Individual Shard | `engine_shard.{h,cc}` | Per-thread shard management |
+| Database Instance | `db_slice.{h,cc}` | Per-shard database instance |
+| Transactions | `transaction.{h,cc}` | Transaction framework using VLL algorithm |
+
+#### Command Families
+
+Each command family implements a group of Redis commands:
+
+- **string_family** - SET, GET, INCR, etc.
+- **hset_family** - HSET, HGET (hashes)
+- **list_family** - LPUSH, RPOP (lists)
+- **set_family** - SADD, SINTER (sets)
+- **zset_family** - ZADD, ZRANGE (sorted sets)
+- **json_family** - JSON operations
+- **stream_family** - Redis Streams
+- **bloom_family** - Bloom filters
+- **search_family** - Full-text search
+
+#### Advanced Features
+
+- `acl/` - Access Control Lists
+- `cluster/` - Cluster mode support
+- `journal/` - Replication journaling
+- `tiering/` - Tiered storage (RAM + SSD)
+- `rdb_save.cc`, `rdb_load.cc` - Redis RDB format persistence
+- `snapshot.cc` - Fork-less snapshotting
+
+### 2. Core Layer (`/src/core/`)
+
+Contains 70 .cc files and 60 .h files with critical data structures:
+
+| Data Structure | File | Description |
+|----------------|------|-------------|
+| DASH Hashtable | `dash.h` | Scalable concurrent hash table with lock-free reads and incremental resizing |
+| Dense Set | `dense_set.{h,cc}` | Compact set implementation |
+| Compact Object | `compact_object.{h,cc}` | Memory-efficient object representation |
+| Memory Resource | `mi_memory_resource.{h,cc}` | Custom memory allocator using mimalloc |
+| Intent Lock | `intent_lock.h` | Lock management for VLL transactions |
+| Transaction Queue | `tx_queue.{h,cc}` | Transaction queue management |
+
+#### Specialized Components
+
+- `json/` - JSON path operations
+- `search/` - Search indexing (AST, lexer, parser)
+- `bloom.cc` - Bloom filter implementation
+- `count_min_sketch.cc` - Probabilistic counting
+- `qlist.cc` - Quicklist (Redis list implementation)
+
+### 3. Facade Layer (`/src/facade/`)
+
+Contains 21 .cc files and 18 .h files handling network protocols:
+
+| Component | Purpose |
+|-----------|---------|
+| `dragonfly_listener.{h,cc}` | TCP listener for incoming connections |
+| `dragonfly_connection.{h,cc}` | Connection state machine |
+| `redis_parser.{h,cc}` | Redis RESP protocol parser |
+| `memcache_parser.{h,cc}` | Memcached protocol parser |
+| `reply_builder.{h,cc}` | Response formatting |
+| `service_interface.h` | Abstract interface for command execution |
+
+### 4. Redis Integration (`/src/redis/`)
+
+Contains vendored Redis C library code for compatibility with Redis data structures and algorithms. Key components include:
+
+- `sds.{c,h}` - Simple Dynamic Strings
+- `listpack.{c,h}` - Compact list encoding
+- `quicklist.{c,h}` - Redis list implementation
+- `rax.{c,h}` - Radix tree (used for streams)
+- `intset.{c,h}` - Integer set implementation
+- `hyperloglog.c` - HyperLogLog probabilistic counting
+- `geo.c`, `geohash.c` - Geospatial indexing
+
+> **Key Modification:** Dragonfly created `zmalloc_mi.c` to use **mimalloc** instead of Redis's default allocator, providing better performance and lower fragmentation.
+
+## How Dragonfly Runs
+
+### Startup Sequence
+
+```
+main()                                    // dfly_main.cc
+↓
+Initialize ProactorPool                   // Thread pool for I/O
+↓
+Create EngineShardSet                     // Shared-nothing shards
+↓
+Initialize MainService                    // Command registry
+↓
+Register Command Families                 // 185+ Redis commands
+↓
+Start Listeners                          // Redis (6379), Memcached, HTTP
+↓
+Event Loop                               // Process commands
+```
+
+### Request Processing Flow
+
+```
+Client Connection
+↓
+[Facade Layer]
+↓ Parse Protocol (RESP/Memcached)
+↓
+[MainService]
+↓ Lookup Command in Registry
+↓
+[Transaction Framework]
+↓ Determine Affected Shards
+↓ Acquire Intent Locks (VLL)
+↓
+[Shard Execution] (Parallel)
+↓ Execute on Each Shard
+↓ Access DbSlice (per-shard DB)
+↓ Modify DASH Table
+↓
+[Facade Layer]
+↓ Format Response
+↓
+Return to Client
+```
+
+### Shared-Nothing Architecture
+
+Each thread manages its own shard independently:
+
+```cpp
+// Each thread manages its own shard
+EngineShardSet creates N shards = N threads
+Each EngineShard has:
+- DbSlice (database instance)
+- FiberQueue (work queue)
+- DASH table (hash table)
+```
+
+### Transaction Coordination
+
+Multi-key operations coordinate across shards efficiently:
+
+```cpp
+// Multi-key operations coordinate across shards
+Transaction tx;
+tx.InitByKeys(keys);              // Determine shards
+tx.ScheduleSingleHop([]{          // Execute on shards
+// Runs on each shard in parallel
+auto* shard = EngineShard::tlocal();
+shard->db_slice()->Find(key);
+});
+```
+
+### Lock-Free Coordination (VLL)
+
+- Uses **Intent Locks** instead of traditional locks
+- Transactions ordered by transaction ID
+- No spin-locks or mutexes for common operations
+- Enables high concurrency without contention
+
+## Performance Innovations
+
+### 1. DASH Table
+
+- Cache-line aligned buckets for CPU efficiency
+- Incremental resizing without blocking operations
+- Lock-free reads for maximum throughput
+- Stash buckets for collision handling
+
+### 2. Memory Efficiency
+
+| Technique | Description | Benefit |
+|-----------|-------------|---------|
+| CompactObject | Stores small strings inline (< 24 bytes) | Reduces memory allocations |
+| SmallString | Optimized string storage | Lower memory overhead |
+| mimalloc | Fast memory allocator | Low fragmentation, high performance |
+| Tiered Storage | Offload cold data to SSD | Scale beyond RAM capacity |
+
+### 3. Novel Eviction Algorithm
+
+- **Zero memory overhead** - No LRU lists required
+- Uses access patterns in the DASH table itself
+- Predicts future access probability
+- Configurable with `--cache_mode=true`
+
+### 4. Fork-less Snapshotting
+
+- Uses copy-on-write at the data structure level
+- No OS fork() overhead
+- Minimal memory increase during snapshot
+- Faster than Redis BGSAVE
+
+## Execution Model
+
+### Thread Model
+
+```
+Main Thread
+├── I/O Proactor Thread 1 → EngineShard 1 → DbSlice 1
+├── I/O Proactor Thread 2 → EngineShard 2 → DbSlice 2
+├── ...
+└── I/O Proactor Thread N → EngineShard N → DbSlice N
+```
+
+### Fiber-based Concurrency
+
+- Each thread runs **fibers** (lightweight coroutines)
+- Multiple client connections per thread
+- Non-blocking I/O with io_uring (Linux) or epoll
+- No callback hell - sequential code with async benefits
+
+### Data Sharding Strategy
+
+```cpp
+// Keys distributed via hash
+ShardId shard = Shard(key, num_shards);
+
+// Single-key operations → one shard
+SET key value  // Runs on shard(hash(key))
+
+// Multi-key operations → multiple shards
+MSET k1 v1 k2 v2  // Coordinates across shards
+
+// Global operations → all shards
+FLUSHDB  // Runs on all shards
+```
+
+## Command Processing Example: SET Command
+
+Let's trace how a simple `SET key value` command flows through the system:
+
+```
+1. Client sends: "*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+
+2. RedisParser::Parse() → ["SET", "key", "value"]
+
+3. MainService::DispatchCommand()
+   - Lookup "SET" → StringFamily::Set()
+
+4. Transaction::InitByArgs(["key"])
+   - Calculate shard: hash("key") % num_shards = 3
+
+5. Transaction::ScheduleSingleHop()
+   - Dispatch to Shard 3's FiberQueue
+
+6. EngineShard::tlocal() on Shard 3
+   - DbSlice::AddOrUpdate("key", "value")
+   - DASH table insert
+
+7. ReplyBuilder::SendSimpleString("OK")
+
+8. Client receives: "+OK\r\n"
+```
+
+## Redis Integration: Vendored Code Strategy
+
+Dragonfly takes a hybrid approach with Redis code:
+
+| What Dragonfly Uses | What Dragonfly Doesn't Use |
+|---------------------|---------------------------|
+| ✅ Redis data structures (sds, listpack, quicklist) | ❌ Redis networking layer |
+| ✅ Redis algorithms (hyperloglog, geo) | ❌ Redis dict |
+| ✅ Redis RDB format | ❌ Redis event loop |
+| ✅ Redis Lua integration | ❌ Redis transaction system |
+| ✅ Modified zmalloc (using mimalloc) | ❌ Redis cluster implementation |
+
+> **Why This Approach?**
+>
+> - **API Compatibility** - Using actual Redis code ensures exact behavior
+> - **Battle-Tested** - Redis data structures are highly optimized
+> - **Time Savings** - No need to reimplement complex structures
+> - **Format Compatibility** - RDB files, wire protocol match exactly
+
+### Custom Memory Allocator Integration
+
+Dragonfly's most significant modification to Redis code:
+
+```c
+// src/redis/zmalloc_mi.c
+// Copyright 2022, DragonflyDB authors. All rights reserved.
+
+#include <mimalloc.h>
+
+void* zmalloc(size_t size) {
+    assert(zmalloc_heap);
+    void* res = mi_heap_malloc(zmalloc_heap, size);  // Uses mimalloc!
+    size_t usable = mi_usable_size(res);
+    zmalloc_used_memory_tl += usable;
+    return res;
+}
+```
+
+## Build System
+
+```
+# CMakeLists.txt structure
+src/CMakeLists.txt
+├── add_subdirectory(redis)     # Redis C library
+├── add_subdirectory(core)      # Core data structures
+├── add_subdirectory(facade)    # Protocol handlers
+└── add_subdirectory(server)    # Main server binary
+
+# Main executable: dragonfly
+# Test executables: *_test
+```
+
+### Build Dependencies
+
+- C++20 compiler (GCC/Clang)
+- mimalloc (custom memory allocator)
+- Abseil (Google's C++ library)
+- io_uring (Linux async I/O)
+- xxHash (fast hashing)
+
+## Key Takeaways
+
+| Concept | Implementation | Impact |
+|---------|----------------|--------|
+| Shared-Nothing | Each thread is independent, no contention | Linear scalability with CPU cores |
+| VLL Transactions | Coordination without locks | High concurrency without blocking |
+| DASH Table | Fast, scalable hash table | Lock-free reads, efficient resizing |
+| Fibers | Lightweight concurrency within threads | Handle many connections efficiently |
+| Multi-Protocol | Same port serves Redis, Memcached, HTTP | Flexibility and compatibility |
+| Memory Efficiency | Compact representations, efficient allocator | Better memory utilization |
+| Tiered Storage | Scale beyond RAM with SSD offloading | Cost-effective large datasets |
+
+**This architecture is why Dragonfly achieves 25X throughput compared to single-threaded Redis while maintaining full API compatibility!**
+
+By combining innovative shared-nothing design, lock-free data structures, and efficient memory management with battle-tested Redis data structures, Dragonfly delivers the best of both worlds: cutting-edge performance and proven reliability.
+
+## What's Next?
+
+In Part 3, we'll explore practical implementation patterns, deployment strategies, and real-world use cases for integrating Dragonfly into your system architecture.
+
+[← Back to Part 1: DragonflyDB vs Redis Comparison](dragonfly.mdx)
+

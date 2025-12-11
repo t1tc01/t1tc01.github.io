@@ -1,0 +1,7 @@
+{
+    "title": "PostgreSQL",
+    "description": "PostgreSQL Series",
+    "icon": "Database",
+    "root": true,
+    "pages": ["index", "question-interview-postgres"]
+}

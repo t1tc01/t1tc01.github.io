@@ -15,7 +15,7 @@
     "postinstall": "fumadocs-mdx && bun husky",
     "prepare": "husky",
     "upgrade.deps": "bunx npm-check-updates --dep dev,prod,peer -u",
-    "start": "bux serve out"
+    "start": "bunx serve out"
   },
   "dependencies": {
     "@radix-ui/react-tooltip": "^1.1.6",

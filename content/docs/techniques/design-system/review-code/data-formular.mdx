@@ -1,0 +1,264 @@
+---
+title: "Data Formulator Backend Architecture: A Deep Dive into AI-Powered Data Analysis"
+description: "Explore the architecture of Data Formulator's Flask-based Python backend. Learn how AI agents, DuckDB, and real-time communication work together to transform, analyze, and visualize data with security and scalability in mind."
+---
+# 📊 Data Formulator Backend - Easy Overview
+
+## 🏗️ Architecture Overview
+
+The Data Formulator backend is a **Flask-based Python application** that helps users transform, analyze, and visualize data using AI agents. Think of it as a smart data assistant with multiple specialized "brains" (agents) for different tasks.
+
+### Main Components:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Flask App (app.py)                   │
+│  - Session Management                                    │
+│  - API Configuration                                     │
+│  - Static File Serving                                   │
+└─────────────────────────────────────────────────────────┘
+│
+┌──────────────────┼──────────────────┐
+│                  │                  │
+▼                  ▼                  ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│  Agent Routes│  │ Table Routes │  │  SSE Routes  │
+│ (AI Agents)  │  │ (Data Mgmt)  │  │ (Real-time)  │
+└──────────────┘  └──────────────┘  └──────────────┘
+│                  │
+▼                  ▼
+┌──────────────┐  ┌──────────────┐
+│  AI Models   │  │  DuckDB      │
+│ (OpenAI,etc) │  │  Database    │
+└──────────────┘  └──────────────┘
+```
+
+## 📁 Core Files Breakdown
+
+### `app.py` - 🚀 The Main Application
+
+**What it does:**
+
+- Initializes the Flask web server
+- Manages user sessions (each user gets a unique session ID)
+- Loads environment variables (API keys, configs)
+- Registers three main blueprints (route modules)
+- Serves static files (the frontend)
+
+**Key Functions:**
+
+- `get_session_id()` - Creates/retrieves user sessions
+- `get_app_config()` - Provides frontend configuration
+- `get_example_dataset_list()` - Loads sample datasets (gapminder, movies, etc.)
+
+---
+
+### `agent_routes.py` - 🤖 AI Agent Endpoints
+
+**What it does:**
+
+- Provides API endpoints to interact with various AI agents
+- Handles model configuration (OpenAI, Azure, Anthropic, Gemini, Ollama)
+- Tests and validates AI models
+- Processes user requests for data transformations, cleaning, sorting, etc.
+
+**Key Endpoints:**
+
+| Endpoint | What It Does |
+|----------|--------------|
+| `/check-available-models` | Scans which AI models are available & working |
+| `/test-model` | Tests if a specific AI model is responsive |
+| `/process-data-on-load` | AI suggests data cleaning when loading data |
+| `/derive-data` | AI transforms data based on natural language |
+| `/refine-data` | AI refines previous transformations |
+| `/derive-py-concept` | AI creates Python functions for new columns |
+| `/clean-data` | AI cleans messy data |
+| `/sort-data` | AI intelligently sorts data |
+| `/code-expl` | AI explains generated code |
+| `/query-completion` | AI helps complete SQL/data queries |
+
+---
+
+### `tables_routes.py` - 📊 Database Management
+
+**What it does:**
+
+- Manages all table/data operations using DuckDB
+- Handles file uploads (CSV, Excel, JSON)
+- Executes queries and provides data samples
+- Integrates with external data sources
+
+**Key Endpoints:**
+
+| Endpoint | What It Does |
+|----------|--------------|
+| `/list-tables` | Lists all tables in user's session |
+| `/create-table` | Creates table from uploaded file |
+| `/get-table` | Retrieves paginated table data |
+| `/sample-table` | Gets random/head/bottom samples |
+| `/query` | Executes SQL queries |
+| `/analyze` | Provides statistics (min, max, avg, etc.) |
+| `/delete-table` | Drops tables or views |
+| `/upload-db-file` | Uploads a DuckDB file |
+| `/download-db-file` | Downloads session database |
+| `/reset-db-file` | Clears session database |
+| `/data-loader/*` | Connects to external data sources |
+
+---
+
+### `sse_routes.py` - 📡 Real-Time Communication
+
+**What it does:**
+
+- Implements **Server-Sent Events (SSE)** for real-time updates
+- Allows server to push updates to the client without polling
+- Maintains persistent connections with heartbeats
+
+**Key Endpoints:**
+
+| Endpoint | What It Does |
+|----------|--------------|
+| `/connect` | Establishes SSE connection |
+| `/send-message` | Sends messages to specific sessions |
+| `/broadcast` | Sends messages to all connected clients |
+| `/status` | Shows connection status |
+
+---
+
+### `db_manager.py` - 🗄️ Database Connection Manager
+
+**What it does:**
+
+- Manages DuckDB connections per session
+- Each user gets their own isolated database file
+- Provides context managers for safe connection handling
+
+**Key Features:**
+
+- Creates temporary database files per session
+- Auto-closes connections to prevent leaks
+- Stores databases in temp directory or custom location
+
+---
+
+### `py_sandbox.py` - 🔒 Safe Code Execution
+
+**What it does:**
+
+- Executes AI-generated Python code safely
+- Prevents malicious code from accessing files or system
+- Can run in subprocess (safer) or main process (faster)
+
+**Security Features:**
+
+- Blocks file writing
+- Blocks subprocess/system calls
+- Only allows safe Python libraries (pandas, numpy, etc.)
+- Uses audit hooks to monitor dangerous operations
+
+---
+
+## 🤖 AI Agents (in `/agents` folder)
+
+The system has **multiple specialized AI agents**, each an expert at one task:
+
+| Agent | Purpose |
+|-------|---------|
+| `PythonDataTransformationAgent` | Transforms data using Python code |
+| `SQLDataTransformationAgent` | Transforms data using SQL queries |
+| `PythonDataRecAgent` | Recommends data transformations |
+| `SQLDataRecAgent` | Recommends SQL-based transformations |
+| `DataLoadAgent` | Helps load and prepare data |
+| `DataCleanAgent` | Cleans messy/raw data |
+| `PyConceptDeriveAgent` | Creates new calculated columns |
+| `ConceptDeriveAgent` | Derives new concepts from data |
+| `SortDataAgent` | Intelligently sorts data |
+| `CodeExplanationAgent` | Explains generated code |
+| `QueryCompletionAgent` | Helps complete queries |
+
+---
+
+## 🔌 Data Loaders (in `/data_loader` folder)
+
+Connect to external data sources:
+
+- 🐘 **PostgreSQL** - Connect to PostgreSQL databases
+- 🐬 **MySQL** - Connect to MySQL databases
+- 🔷 **MSSQL** - Connect to SQL Server
+- 📊 **Kusto** - Connect to Azure Data Explorer
+- ☁️ **S3** - Load data from AWS S3 buckets
+- 💫 **Azure Blob** - Load data from Azure Blob Storage
+
+---
+
+## 🔄 How It All Works Together
+
+### Example Flow: "Calculate 7-day moving average"
+
+1. **Frontend** sends request to `/api/agent/derive-data`
+2. **agent_routes.py** receives the request
+3. **PythonDataTransformationAgent** is initialized
+4. Agent sends prompt to **AI Model** (e.g., GPT-4)
+5. AI generates Python code:
+   ```python
+   def transform_data(df):
+       df['7-day avg'] = df['Cases'].rolling(7).mean()
+       return df
+   ```
+6. **py_sandbox.py** executes code safely
+7. Results saved to **DuckDB** via **db_manager**
+8. Response sent back to frontend
+9. **SSE** can push updates in real-time
+
+---
+
+## 🔑 Key Design Patterns
+
+### 🏗️ Blueprint Architecture
+
+Flask blueprints organize routes into logical modules:
+
+- `agent_bp` - AI operations
+- `tables_bp` - Data management
+- `sse_bp` - Real-time communication
+
+### 🔒 Session Isolation
+
+Each user gets:
+
+- Unique session ID
+- Separate DuckDB database
+- Isolated data and transformations
+
+### 🤖 Agent Pattern
+
+Each agent follows the same structure:
+
+- `__init__()` - Setup with AI client
+- `run()` - Main execution
+- `followup()` - Iterative refinement
+- `process_gpt_response()` - Handle AI output
+
+### 🛡️ Safety First
+
+- Sandboxed code execution
+- SQL injection prevention
+- Error message sanitization
+- API key protection
+
+---
+
+## 🎯 Summary
+
+**In simple terms:** Data Formulator's backend is like a **smart data assistant** that:
+
+- 🗄️ **Stores your data** in an isolated database (DuckDB)
+- 🤖 **Uses AI** to understand what you want to do with your data
+- 💻 **Generates code** (Python/SQL) to transform your data
+- 🔒 **Safely executes** that code in a sandbox
+- 📊 **Returns results** back to you
+- 📡 **Updates in real-time** via Server-Sent Events (SSE)
+- 🔌 **Connects to external data** when needed
+
+All while keeping your data **private** and **secure**!
+

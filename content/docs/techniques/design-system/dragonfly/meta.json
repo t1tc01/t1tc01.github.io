@@ -1,0 +1,7 @@
+{
+    "title": "Dragonfly",
+    "description": "Dragonfly Series",
+    "icon": "Database",
+    "root": true,
+    "pages": ["index", "dragonfly", "dragonfly-architecture"]
+}

@@ -1,0 +1,66 @@
+---
+title: "Design System - Part 1: DragonflyDB / Redis - Which Is the Best Caching Service?"
+description: "When looking to choose a caching service, DragonflyDB and Redis are two major contenders. This article provides a comprehensive comparison covering architecture, performance, ecosystem, installation, and implementation to help you select the best caching technology for your project needs."
+---
+# Design System - Part 1: DragonflyDB / Redis - Which Is the Best Caching Service?
+
+When looking to choose a caching service, DragonflyDB and Redis are two major contenders. Below is a clear comparison to help understand their differences.
+
+## Architecture / Performance
+
+| Feature | DragonflyDB | Redis |
+|---------|-------------|-------|
+| Architecture | Multi-threaded, sharded per CPU core | Single-threaded event loop |
+| Throughput | Up to 25x higher under load | High but limited by single-thread bottleneck |
+| Latency | Lower latency, better during heavy usage | Low latency but higher variation |
+| Scalability | Vertical scaling on single instance | Requires clusters for scaling |
+| Memory efficiency | Optimized snapshotting and memory use | Efficient but snapshotting blocks operations |
+
+You can see detail of benchmarking here: [https://www.dragonflydb.io/docs/getting-started/benchmark](https://www.dragonflydb.io/docs/getting-started/benchmark)
+
+## Ecosystem / Usability
+
+| Aspect | DragonflyDB | Redis |
+|--------|-------------|-------|
+| API Compatibility | Drop-in Redis compatible | Original Redis API |
+| Community & Tools | Growing rapidly but smaller ecosystem | Large, mature, extensive ecosystem |
+| Maintenance | Easier scaling, fewer cluster complexities | More complex cluster setup and management |
+
+# Install dragonflydb
+
+## Install with docker (On Linux)
+
+```bash
+docker run --network=host --ulimit memlock=-1 docker.dragonflydb.io/dragonflydb/dragonfly
+```
+
+Reference: [https://www.dragonflydb.io/docs/getting-started/docker](https://www.dragonflydb.io/docs/getting-started/docker)
+
+## Docker compose
+
+```bash
+# Download Official Dragonfly Docker Compose File
+wget https://raw.githubusercontent.com/dragonflydb/dragonfly/main/contrib/docker/docker-compose.yml
+# Launch the Dragonfly Instance
+docker compose up -d
+# Confirm image is up
+docker ps | grep dragonfly
+# ac94b5ba30a0   docker.dragonflydb.io/dragonflydb/dragonfly   "entrypoint.sh drago…"   45 seconds ago   Up 31 seconds         0.0.0.0:6379->6379/tcp, :::6379->6379/tcp   docker_dragonfly_1
+# Log follow the dragonfly container
+docker logs -f docker_dragonfly_1
+```
+
+Reference: [https://www.dragonflydb.io/docs/getting-started/docker-compose](https://www.dragonflydb.io/docs/getting-started/docker-compose)
+
+# Implement dragonflydb
+
+DragonflyBD adapt with RedisClient, so you can implement this same as implementing redis.
+
+## Summary
+
+DragonflyDB is a modern design optimized for concurrency and multi-core performance, making it ideal for high throughput, low latency caching. Redis, while single-threaded, is trusted for its mature tooling, massive community, and robust ecosystem, but scaling can be more complex.
+
+For new systems prioritizing speed and simplified vertical scaling, DragonflyDB is the best fit. For applications requiring proven tools and community support, Redis remains a reliable choice.
+
+This comparison can serve as the first part in a technical blog series on design systems, guiding readers through selecting the best caching technology to meet their project needs.
+
