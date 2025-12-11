@@ -1,0 +1,14 @@
+{
+  "title": "Techniques",
+  "description": "Web/Mobile/App/AI Techniques",
+  "icon": "Building2",
+  "root": true,
+  "pages": [
+    "index",
+    "web",
+    "mobile",
+    "vision-os",
+    "design-system",
+    "..."
+  ]
+}

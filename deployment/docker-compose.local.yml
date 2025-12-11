@@ -1,0 +1,15 @@
+name: tier1club
+
+services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+      tags:
+        - "registry.gitlab.com/tier1club/tier1-frontend:0.0.8"
+    network_mode: bridge
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "80:80"
+      - "443:443"
